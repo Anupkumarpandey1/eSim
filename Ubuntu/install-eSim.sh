@@ -170,23 +170,23 @@ function installDependency
     echo "Installing Matplotlib......................"
     sudo apt-get install -y python3-matplotlib
 
-    # CRITICAL FIX: python3-distutils issue in Ubuntu 23.04+
+    # IMPROVED FIX: Handle python3-distutils properly in newer Ubuntu versions
     echo "Handling Python distutils dependency......"
-    # In Ubuntu 23.04+, distutils is part of Python standard library
-    # No need to install it as a separate package
+    # Get Python version to make better decisions
     PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1-2)
     echo "Detected Python version: $PYTHON_VERSION"
     
-    # Only try to install python3-distutils on older Ubuntu versions
-    if $(apt-cache search python3-distutils | grep -q python3-distutils); then
-        echo "python3-distutils package found in repositories, installing..."
+    # Check if the package exists in repositories before trying to install it
+    if apt-cache show python3-distutils &>/dev/null; then
+        echo "Installing python3-distutils package..."
         sudo apt-get install -y python3-distutils
     else
-        echo "python3-distutils package not available in repositories."
-        echo "Using built-in distutils included in Python $PYTHON_VERSION."
-        # Check if distutils is actually available in Python
-        if ! python3 -c "import distutils; print('distutils is available')" &>/dev/null; then
-            echo "Installing python3-stdlib-extension for distutils support..."
+        echo "python3-distutils package not available - using built-in distutils."
+        # In newer Ubuntu versions (22.04+), distutils is part of the standard library
+        # Check if distutils is actually available
+        if ! python3 -c "import distutils; print('distutils available')" &>/dev/null; then
+            echo "Trying alternative package for distutils support..."
+            # On some systems, this might be in a different package
             sudo apt-get install -y python3-stdlib-extensions || true
         fi
     fi
@@ -211,7 +211,6 @@ function installDependency
     echo "Installing required Python packages in virtualenv..."
     pip install matplotlib PyQt5 hdlparse watchdog
 }
-
 
 function copyKicadLibrary
 {
