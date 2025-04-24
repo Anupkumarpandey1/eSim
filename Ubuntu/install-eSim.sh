@@ -62,6 +62,12 @@ function installNghdl
 {
 
     echo "Installing NGHDL..........................."
+    # BUG FIX 1: Check if nghdl.zip exists before attempting to unzip
+    if [ ! -f nghdl.zip ]; then
+        echo "Error: nghdl.zip not found. Please make sure it exists in the current directory."
+        return 1
+    fi
+    
     unzip -o nghdl.zip
     cd nghdl/
     chmod +x install-nghdl.sh
@@ -85,6 +91,12 @@ function installSky130Pdk
 
     echo "Installing SKY130 PDK......................"
     
+    # BUG FIX 2: Check if SKY130 PDK archive exists before extracting
+    if [ ! -f library/sky130_fd_pr.tar.xz ]; then
+        echo "Error: SKY130 PDK archive not found at library/sky130_fd_pr.tar.xz"
+        return 1
+    fi
+    
     # Extract SKY130 PDK
     tar -xJf library/sky130_fd_pr.tar.xz
 
@@ -105,21 +117,19 @@ function installSky130Pdk
 
 function installKicad
 {
-
     echo "Installing KiCad..........................."
-
-    kicadppa="kicad/kicad-6.0-releases"
-    findppa=$(grep -h -r "^deb.*$kicadppa*" /etc/apt/sources.list* > /dev/null 2>&1 || test $? = 1)
-    if [ -z "$findppa" ]; then
-        echo "Adding KiCad-6 ppa to local apt-repository"
-        sudo add-apt-repository -y ppa:kicad/kicad-6.0-releases
-        sudo apt-get update
-    else
-        echo "KiCad-6 is available in synaptic"
-    fi
-
+    
+    # Ubuntu 23.04 has KiCad 7.0 in its main repositories
     sudo apt-get install -y --no-install-recommends kicad kicad-footprints kicad-libraries kicad-symbols kicad-templates
 
+    # BUG FIX 3: Check KiCad version and adjust configuration directory path
+    kicad_version=$(apt-cache policy kicad | grep -oP 'Installed: \K[0-9]+\.[0-9]+' || echo "6.0")
+    kicad_major_version=${kicad_version%%.*}
+    
+    # Set the KiCad config directory based on installed version
+    echo "Detected KiCad version: $kicad_version (major: $kicad_major_version)"
+    export KICAD_CONFIG_DIR="$HOME/.config/kicad/$kicad_major_version.0"
+    echo "Using KiCad configuration directory: $KICAD_CONFIG_DIR"
 }
 
 
@@ -137,7 +147,7 @@ function installDependency
     trap error_exit ERR
     
     echo "Instaling virtualenv......................."
-    sudo apt install python3-virtualenv
+    sudo apt install -y python3-virtualenv
    
     echo "Creating virtual environment to isolate packages "
     virtualenv $config_dir/env
@@ -161,7 +171,12 @@ function installDependency
     sudo apt-get install -y python3-matplotlib
 
     echo "Installing Distutils......................."
-    sudo apt-get install -y python3-distutils
+    # BUG FIX 4: Check if python3-distutils is available, otherwise use distutils built into Python 3.10+
+    if apt-cache show python3-distutils &>/dev/null; then
+        sudo apt-get install -y python3-distutils
+    else
+        echo "python3-distutils package not found, using built-in distutils in Python 3.10+"
+    fi
 
     # Install NgVeri Depedencies
     echo "Installing Pip3............................"
@@ -179,15 +194,9 @@ function installDependency
     echo "Installing SandPiper Saas.................."
     pip3 install sandpiper-saas
 
-   
-    echo "Installing Hdlparse......................"
-    pip3 install hdlparse
-
-    echo "Installing matplotlib................"
-    pip3 install matplotlib
-
-    echo "Installing PyQt5............."
-    pip3 install PyQt5  
+    # BUG FIX 5: Remove duplicate installations and ensure all pip packages are installed within the virtualenv
+    echo "Installing matplotlib and PyQt5 in virtualenv................"
+    pip install matplotlib PyQt5 hdlparse
 }
 
 
@@ -195,18 +204,25 @@ function copyKicadLibrary
 {
 
     #Extract custom KiCad Library
+    # Check if KiCad library archive exists
+    if [ ! -f library/kicadLibrary.tar.xz ]; then
+        echo "Error: KiCad library archive not found at library/kicadLibrary.tar.xz"
+        return 1
+    fi
+    
     tar -xJf library/kicadLibrary.tar.xz
 
-    if [ -d ~/.config/kicad/6.0 ];then
-        echo "kicad config folder already exists"
+    # Use the KiCad configuration directory determined during installation
+    if [ -d "$KICAD_CONFIG_DIR" ]; then
+        echo "KiCad config folder already exists at $KICAD_CONFIG_DIR"
     else 
-        echo ".config/kicad/6.0 does not exist"
-        mkdir -p ~/.config/kicad/6.0
+        echo "$KICAD_CONFIG_DIR does not exist"
+        mkdir -p "$KICAD_CONFIG_DIR"
     fi
 
     # Copy symbol table for eSim custom symbols 
-    cp kicadLibrary/template/sym-lib-table ~/.config/kicad/6.0/
-    echo "symbol table copied in the directory"
+    cp kicadLibrary/template/sym-lib-table "$KICAD_CONFIG_DIR"/
+    echo "Symbol table copied in the directory"
 
     # Copy KiCad symbols made for eSim
     sudo cp -r kicadLibrary/eSim-symbols/* /usr/share/kicad/symbols/
@@ -382,8 +398,16 @@ elif [ $option == "--uninstall" ];then
         echo "Removing KiCad..........................."
         sudo apt purge -y kicad kicad-footprints kicad-libraries kicad-symbols kicad-templates
         sudo rm -rf /usr/share/kicad
-	sudo rm /etc/apt/sources.list.d/kicad*
-        rm -rf $HOME/.config/kicad/6.0
+        
+        # Check if KiCad apt repository file exists before attempting to remove
+        if [ -f /etc/apt/sources.list.d/kicad* ]; then
+            sudo rm /etc/apt/sources.list.d/kicad*
+        fi
+        
+        # Use the detected KiCad config directory for removal
+        kicad_version=$(apt-cache policy kicad 2>/dev/null | grep -oP 'Installed: \K[0-9]+\.[0-9]+' || echo "6.0")
+        kicad_major_version=${kicad_version%%.*}
+        rm -rf $HOME/.config/kicad/$kicad_major_version.0
 
         echo "Removing Virtual env......................."
         sudo rm -r $config_dir/env
@@ -394,19 +418,24 @@ elif [ $option == "--uninstall" ];then
         echo "Removing NGHDL..........................."
         rm -rf library/modelParamXML/Nghdl/*
         rm -rf library/modelParamXML/Ngveri/*
-        cd nghdl/
-        if [ $? -eq 0 ];then
-        	chmod +x install-nghdl.sh
-    	    ./install-nghdl.sh --uninstall
-    	    cd ../
-    	    rm -rf nghdl
-            if [ $? -eq 0 ];then
-                echo -e "----------------eSim Uninstalled Successfully----------------"
+        
+        if [ -d nghdl ]; then
+            cd nghdl/
+            if [ $? -eq 0 ]; then
+                chmod +x install-nghdl.sh
+                ./install-nghdl.sh --uninstall
+                cd ../
+                rm -rf nghdl
+                if [ $? -eq 0 ]; then
+                    echo -e "----------------eSim Uninstalled Successfully----------------"
+                else
+                    echo -e "\nError while removing some files/directories in \"nghdl\". Please remove it manually"
+                fi
             else
-                echo -e "\nError while removing some files/directories in \"nghdl\". Please remove it manually"
+                echo -e "\nCannot find \"nghdl\" directory. Please remove it manually"
             fi
         else
-            echo -e "\nCannot find \"nghdl\" directory. Please remove it manually"
+            echo "NGHDL directory not found. It may have been already removed."
         fi
     elif [ $getConfirmation == "n" -o $getConfirmation == "N" ];then
         exit 0
