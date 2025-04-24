@@ -152,22 +152,34 @@ function installDependency
     PYTHON_MAJOR_MINOR=$(echo $PYTHON_VERSION | cut -d'.' -f1,2)
     echo "Detected Python version: $PYTHON_MAJOR_MINOR"
 
-    # Check if distutils is available via Python
-    if ! python3 -c "import distutils" &>/dev/null; then
-        echo "distutils not found in standard library, installing setuptools in virtualenv..."
-        pip install setuptools
-    else
-        echo "distutils is already available in Python."
-    fi
+    # Install setuptools for distutils functionality
+    echo "Installing setuptools in virtualenv........"
+    pip install setuptools
 
     echo "Installing Pip3............................"
     sudo apt install -y python3-pip
 
     echo "Installing Python packages in virtualenv..."
-    pip install setuptools matplotlib PyQt5 hdlparse watchdog makerchip-app sandpiper-saas
-
-    echo "Installing Hdlparse........................"
-    pip install --upgrade https://github.com/hdl/pyhdlparser/tarball/master
+    # Installing packages individually to handle errors better
+    pip install matplotlib
+    pip install PyQt5
+    pip install watchdog
+    
+    # For hdlparse, use a specific version or fork that works with modern Python
+    echo "Installing Hdlparse with compatibility fix..."
+    # Use a specific version that works with Python 3.12
+    pip install 'setuptools<58.0.0'  # For legacy package compatibility
+    pip install wheel
+    
+    # Try alternative sources for hdlparse
+    set +e  # Don't exit on error for this attempt
+    pip install git+https://github.com/kevinpt/hdlparse.git || \
+    pip install --use-deprecated=legacy-resolver hdlparse || \
+    echo "WARNING: Could not install hdlparse. Some functionality may be limited."
+    set -e  # Re-enable exit on error
+    
+    echo "Installing Makerchip and SandPiper........."
+    pip install makerchip-app sandpiper-saas || echo "WARNING: Some packages could not be installed."
 }
 
 function copyKicadLibrary
