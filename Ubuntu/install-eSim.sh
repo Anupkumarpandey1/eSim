@@ -29,16 +29,13 @@ ngspiceFlag=0
 
 error_exit()
 {
-
     echo -e "\n\nError! Kindly resolve above error(s) and try again."
     echo -e "\nAborting Installation...\n"
-
+    exit 1
 }
-
 
 function createConfigFile
 {
-
     # Creating config.ini file and adding configuration information
     # Check if config file is present
     if [ -d $config_dir ];then
@@ -54,13 +51,10 @@ function createConfigFile
     echo "IMAGES = %(eSim_HOME)s/images" >> $config_dir/$config_file
     echo "VERSION = %(eSim_HOME)s/VERSION" >> $config_dir/$config_file
     echo "MODELICA_MAP_JSON = %(eSim_HOME)s/library/ngspicetoModelica/Mapping.json" >> $config_dir/$config_file
-   
 }
-
 
 function installNghdl
 {
-
     echo "Installing NGHDL..........................."
     # Check if nghdl.zip exists before attempting to unzip
     if [ ! -f nghdl.zip ]; then
@@ -82,13 +76,10 @@ function installNghdl
 
     ngspiceFlag=1
     cd ../
-
 }
-
 
 function installSky130Pdk
 {
-
     echo "Installing SKY130 PDK......................"
     
     # Check if SKY130 PDK archive exists before extracting
@@ -111,9 +102,7 @@ function installSky130Pdk
 
     # Change ownership from root to the user
     sudo chown -R $USER:$USER /usr/share/local/sky130_fd_pr/
-
 }
-
 
 function installKicad
 {
@@ -131,7 +120,6 @@ function installKicad
     export KICAD_CONFIG_DIR="$HOME/.config/kicad/$kicad_major_version.0"
     echo "Using KiCad configuration directory: $KICAD_CONFIG_DIR"
 }
-
 
 function installDependency
 {
@@ -166,19 +154,8 @@ function installDependency
 
     # Check if distutils is available via Python
     if ! python3 -c "import distutils" &>/dev/null; then
-        echo "distutils not found in standard library, attempting install..."
-
-        # Try to install python3-distutils or python3.X-distutils
-        if apt-cache show python3-distutils &>/dev/null; then
-            sudo apt-get install -y python3-distutils
-        elif apt-cache show python${PYTHON_MAJOR_MINOR}-distutils &>/dev/null; then
-            sudo apt-get install -y python${PYTHON_MAJOR_MINOR}-distutils
-        elif apt-cache show python3-stdlib-extensions &>/dev/null; then
-            sudo apt-get install -y python3-stdlib-extensions
-        else
-            echo "WARNING: Could not find a suitable distutils package."
-            echo "         Please ensure distutils is available manually."
-        fi
+        echo "distutils not found in standard library, installing setuptools in virtualenv..."
+        pip install setuptools
     else
         echo "distutils is already available in Python."
     fi
@@ -186,23 +163,15 @@ function installDependency
     echo "Installing Pip3............................"
     sudo apt install -y python3-pip
 
-    echo "Installing Watchdog........................"
-    pip3 install watchdog
+    echo "Installing Python packages in virtualenv..."
+    pip install setuptools matplotlib PyQt5 hdlparse watchdog makerchip-app sandpiper-saas
 
     echo "Installing Hdlparse........................"
-    pip3 install --upgrade https://github.com/hdl/pyhdlparser/tarball/master
-
-    echo "Installing Makerchip and SandPiper........."
-    pip3 install makerchip-app sandpiper-saas
-
-    echo "Installing Python packages in virtualenv..."
-    pip install matplotlib PyQt5 hdlparse watchdog
+    pip install --upgrade https://github.com/hdl/pyhdlparser/tarball/master
 }
-
 
 function copyKicadLibrary
 {
-
     # Extract custom KiCad Library
     # Check if KiCad library archive exists
     if [ ! -f library/kicadLibrary.tar.xz ]; then
@@ -245,13 +214,10 @@ function copyKicadLibrary
 
     # Change ownership from Root to the User
     sudo chown -R $USER:$USER /usr/share/kicad/symbols/
-
 }
-
 
 function createDesktopStartScript
 {    
-
     # Generating new esim-start.sh
     echo '#!/bin/bash' > esim-start.sh
     echo "cd $eSim_Home/src/frontEnd" >> esim-start.sh
@@ -321,12 +287,11 @@ function createDesktopStartScript
     fi
 }
 
-
 ####################################################################
 #                   MAIN START FROM HERE                           #
 ####################################################################
 
-### Checking if file is passsed as argument to script
+### Checking if file is passed as argument to script
 
 if [ "$#" -eq 1 ];then
     option=$1
@@ -347,8 +312,7 @@ if [ $option == "--install" ];then
     # Trap on function error_exit before exiting on error
     trap error_exit ERR
 
-
-    echo "Enter proxy details if you are connected to internet thorugh proxy"
+    echo "Enter proxy details if you are connected to internet through proxy"
     
     echo -n "Is your internet connection behind proxy? (y/n): "
     read getProxy
@@ -407,7 +371,6 @@ if [ $option == "--install" ];then
     echo "-----------------eSim Installed Successfully-----------------"
     echo "Type \"esim\" in Terminal to launch it"
     echo "or double click on \"eSim\" icon placed on Desktop"
-
 
 elif [ $option == "--uninstall" ];then
     echo -n "Are you sure? It will remove eSim completely including KiCad, Makerchip, NGHDL and SKY130 PDK along with their models and libraries (y/n):"
