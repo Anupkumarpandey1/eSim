@@ -135,63 +135,54 @@ function installKicad
 
 function installDependency
 {
+    set +e
+    trap "" ERR
 
-    set +e      # Temporary disable exit on error
-    trap "" ERR # Do not trap on error of any command
-
-    # Update apt repository
     echo "Updating apt index files..................."
     sudo apt-get update
-    
-    set -e      # Re-enable exit on error
+
+    set -e
     trap error_exit ERR
-    
-    echo "Instaling virtualenv......................."
+
+    echo "Installing virtualenv......................"
     sudo apt install -y python3-virtualenv
-   
-    echo "Creating virtual environment to isolate packages "
+
+    echo "Creating virtual environment..............."
     virtualenv $config_dir/env
-    
-    echo "Starting the virtual env..................."
+
+    echo "Starting the virtual environment..........."
     source $config_dir/env/bin/activate
 
-    echo "Upgrading Pip.............................."
+    echo "Upgrading pip.............................."
     pip install --upgrade pip
-    
-    echo "Installing Xterm..........................."
-    sudo apt-get install -y xterm
-    
-    echo "Installing Psutil.........................."
-    sudo apt-get install -y python3-psutil
-    
-    echo "Installing PyQt5..........................."
-    sudo apt-get install -y python3-pyqt5
 
-    echo "Installing Matplotlib......................"
-    sudo apt-get install -y python3-matplotlib
+    echo "Installing basic system packages..........."
+    sudo apt-get install -y xterm python3-psutil python3-pyqt5 python3-matplotlib
 
-    # IMPROVED FIX: Handle python3-distutils properly in newer Ubuntu versions
-    echo "Handling Python distutils dependency......"
-    # Get Python version to make better decisions
-    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1-2)
-    echo "Detected Python version: $PYTHON_VERSION"
-    
-    # Check if the package exists in repositories before trying to install it
-    if apt-cache show python3-distutils &>/dev/null; then
-        echo "Installing python3-distutils package..."
-        sudo apt-get install -y python3-distutils
-    else
-        echo "python3-distutils package not available - using built-in distutils."
-        # In newer Ubuntu versions (22.04+), distutils is part of the standard library
-        # Check if distutils is actually available
-        if ! python3 -c "import distutils; print('distutils available')" &>/dev/null; then
-            echo "Trying alternative package for distutils support..."
-            # On some systems, this might be in a different package
-            sudo apt-get install -y python3-stdlib-extensions || true
+    echo "Handling Python distutils dependency......."
+    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2)
+    PYTHON_MAJOR_MINOR=$(echo $PYTHON_VERSION | cut -d'.' -f1,2)
+    echo "Detected Python version: $PYTHON_MAJOR_MINOR"
+
+    # Check if distutils is available via Python
+    if ! python3 -c "import distutils" &>/dev/null; then
+        echo "distutils not found in standard library, attempting install..."
+
+        # Try to install python3-distutils or python3.X-distutils
+        if apt-cache show python3-distutils &>/dev/null; then
+            sudo apt-get install -y python3-distutils
+        elif apt-cache show python${PYTHON_MAJOR_MINOR}-distutils &>/dev/null; then
+            sudo apt-get install -y python${PYTHON_MAJOR_MINOR}-distutils
+        elif apt-cache show python3-stdlib-extensions &>/dev/null; then
+            sudo apt-get install -y python3-stdlib-extensions
+        else
+            echo "WARNING: Could not find a suitable distutils package."
+            echo "         Please ensure distutils is available manually."
         fi
+    else
+        echo "distutils is already available in Python."
     fi
 
-    # Install NgVeri Depedencies
     echo "Installing Pip3............................"
     sudo apt install -y python3-pip
 
@@ -201,16 +192,13 @@ function installDependency
     echo "Installing Hdlparse........................"
     pip3 install --upgrade https://github.com/hdl/pyhdlparser/tarball/master
 
-    echo "Installing Makerchip......................."
-    pip3 install makerchip-app
+    echo "Installing Makerchip and SandPiper........."
+    pip3 install makerchip-app sandpiper-saas
 
-    echo "Installing SandPiper Saas.................."
-    pip3 install sandpiper-saas
-
-    # Install packages within the virtualenv to avoid conflicts
-    echo "Installing required Python packages in virtualenv..."
+    echo "Installing Python packages in virtualenv..."
     pip install matplotlib PyQt5 hdlparse watchdog
 }
+
 
 function copyKicadLibrary
 {
