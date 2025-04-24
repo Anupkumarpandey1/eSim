@@ -62,7 +62,7 @@ function installNghdl
 {
 
     echo "Installing NGHDL..........................."
-    # BUG FIX 1: Check if nghdl.zip exists before attempting to unzip
+    # Check if nghdl.zip exists before attempting to unzip
     if [ ! -f nghdl.zip ]; then
         echo "Error: nghdl.zip not found. Please make sure it exists in the current directory."
         return 1
@@ -91,7 +91,7 @@ function installSky130Pdk
 
     echo "Installing SKY130 PDK......................"
     
-    # BUG FIX 2: Check if SKY130 PDK archive exists before extracting
+    # Check if SKY130 PDK archive exists before extracting
     if [ ! -f library/sky130_fd_pr.tar.xz ]; then
         echo "Error: SKY130 PDK archive not found at library/sky130_fd_pr.tar.xz"
         return 1
@@ -122,7 +122,7 @@ function installKicad
     # Ubuntu 23.04 has KiCad 7.0 in its main repositories
     sudo apt-get install -y --no-install-recommends kicad kicad-footprints kicad-libraries kicad-symbols kicad-templates
 
-    # BUG FIX 3: Check KiCad version and adjust configuration directory path
+    # Check KiCad version and adjust configuration directory path
     kicad_version=$(apt-cache policy kicad | grep -oP 'Installed: \K[0-9]+\.[0-9]+' || echo "6.0")
     kicad_major_version=${kicad_version%%.*}
     
@@ -170,12 +170,25 @@ function installDependency
     echo "Installing Matplotlib......................"
     sudo apt-get install -y python3-matplotlib
 
-    echo "Installing Distutils......................."
-    # BUG FIX 4: Check if python3-distutils is available, otherwise use distutils built into Python 3.10+
-    if apt-cache show python3-distutils &>/dev/null; then
+    # CRITICAL FIX: python3-distutils issue in Ubuntu 23.04+
+    echo "Handling Python distutils dependency......"
+    # In Ubuntu 23.04+, distutils is part of Python standard library
+    # No need to install it as a separate package
+    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1-2)
+    echo "Detected Python version: $PYTHON_VERSION"
+    
+    # Only try to install python3-distutils on older Ubuntu versions
+    if $(apt-cache search python3-distutils | grep -q python3-distutils); then
+        echo "python3-distutils package found in repositories, installing..."
         sudo apt-get install -y python3-distutils
     else
-        echo "python3-distutils package not found, using built-in distutils in Python 3.10+"
+        echo "python3-distutils package not available in repositories."
+        echo "Using built-in distutils included in Python $PYTHON_VERSION."
+        # Check if distutils is actually available in Python
+        if ! python3 -c "import distutils; print('distutils is available')" &>/dev/null; then
+            echo "Installing python3-stdlib-extension for distutils support..."
+            sudo apt-get install -y python3-stdlib-extensions || true
+        fi
     fi
 
     # Install NgVeri Depedencies
@@ -194,16 +207,16 @@ function installDependency
     echo "Installing SandPiper Saas.................."
     pip3 install sandpiper-saas
 
-    # BUG FIX 5: Remove duplicate installations and ensure all pip packages are installed within the virtualenv
-    echo "Installing matplotlib and PyQt5 in virtualenv................"
-    pip install matplotlib PyQt5 hdlparse
+    # Install packages within the virtualenv to avoid conflicts
+    echo "Installing required Python packages in virtualenv..."
+    pip install matplotlib PyQt5 hdlparse watchdog
 }
 
 
 function copyKicadLibrary
 {
 
-    #Extract custom KiCad Library
+    # Extract custom KiCad Library
     # Check if KiCad library archive exists
     if [ ! -f library/kicadLibrary.tar.xz ]; then
         echo "Error: KiCad library archive not found at library/kicadLibrary.tar.xz"
@@ -224,8 +237,15 @@ function copyKicadLibrary
     cp kicadLibrary/template/sym-lib-table "$KICAD_CONFIG_DIR"/
     echo "Symbol table copied in the directory"
 
-    # Copy KiCad symbols made for eSim
-    sudo cp -r kicadLibrary/eSim-symbols/* /usr/share/kicad/symbols/
+    # Check if symbols directory exists before copying
+    if [ -d "kicadLibrary/eSim-symbols" ]; then
+        # Create the symbols directory if it doesn't exist
+        sudo mkdir -p /usr/share/kicad/symbols/
+        # Copy KiCad symbols made for eSim
+        sudo cp -r kicadLibrary/eSim-symbols/* /usr/share/kicad/symbols/
+    else
+        echo "Warning: eSim-symbols directory not found in kicadLibrary."
+    fi
 
     set +e      # Temporary disable exit on error
     trap "" ERR # Do not trap on error of any command
@@ -236,7 +256,7 @@ function copyKicadLibrary
     set -e      # Re-enable exit on error
     trap error_exit ERR
 
-    #Change ownership from Root to the User
+    # Change ownership from Root to the User
     sudo chown -R $USER:$USER /usr/share/kicad/symbols/
 
 }
@@ -279,6 +299,9 @@ function createDesktopStartScript
     sudo chmod 755 esim.desktop
     # Copy desktop icon file to share applications
     sudo cp -vp esim.desktop /usr/share/applications/
+    
+    # Ensure Desktop directory exists before copying
+    mkdir -p $HOME/Desktop/
     # Copy desktop icon file to Desktop
     cp -vp esim.desktop $HOME/Desktop/
 
@@ -286,7 +309,13 @@ function createDesktopStartScript
     trap "" ERR # Do not trap on error of any command
 
     # Make esim.desktop file as trusted application
-    gio set $HOME/Desktop/esim.desktop "metadata::trusted" true
+    # Check if gio command exists before using it
+    if command -v gio &> /dev/null; then
+        gio set $HOME/Desktop/esim.desktop "metadata::trusted" true
+    else
+        echo "Warning: 'gio' command not found. Desktop icon may need manual trust setting."
+    fi
+    
     # Set Permission and Execution bit
     chmod a+x $HOME/Desktop/esim.desktop
 
@@ -296,9 +325,13 @@ function createDesktopStartScript
     set -e      # Re-enable exit on error
     trap error_exit ERR
 
-    # Copying logo.png to .esim directory to access as icon
-    cp -vp images/logo.png $config_dir
-
+    # Check if images directory exists
+    if [ -d "images" ] && [ -f "images/logo.png" ]; then
+        # Copying logo.png to .esim directory to access as icon
+        cp -vp images/logo.png $config_dir
+    else
+        echo "Warning: Logo image not found. Icon may not display correctly."
+    fi
 }
 
 
@@ -400,7 +433,7 @@ elif [ $option == "--uninstall" ];then
         sudo rm -rf /usr/share/kicad
         
         # Check if KiCad apt repository file exists before attempting to remove
-        if [ -f /etc/apt/sources.list.d/kicad* ]; then
+        if ls /etc/apt/sources.list.d/kicad* >/dev/null 2>&1; then
             sudo rm /etc/apt/sources.list.d/kicad*
         fi
         
@@ -410,14 +443,22 @@ elif [ $option == "--uninstall" ];then
         rm -rf $HOME/.config/kicad/$kicad_major_version.0
 
         echo "Removing Virtual env......................."
-        sudo rm -r $config_dir/env
+        if [ -d "$config_dir/env" ]; then
+            sudo rm -r $config_dir/env
+        fi
 
         echo "Removing SKY130 PDK......................"
-        sudo rm -R /usr/share/local/sky130_fd_pr
+        if [ -d "/usr/share/local/sky130_fd_pr" ]; then
+            sudo rm -R /usr/share/local/sky130_fd_pr
+        fi
 
         echo "Removing NGHDL..........................."
-        rm -rf library/modelParamXML/Nghdl/*
-        rm -rf library/modelParamXML/Ngveri/*
+        if [ -d "library/modelParamXML/Nghdl" ]; then
+            rm -rf library/modelParamXML/Nghdl/*
+        fi
+        if [ -d "library/modelParamXML/Ngveri" ]; then
+            rm -rf library/modelParamXML/Ngveri/*
+        fi
         
         if [ -d nghdl ]; then
             cd nghdl/
@@ -436,6 +477,7 @@ elif [ $option == "--uninstall" ];then
             fi
         else
             echo "NGHDL directory not found. It may have been already removed."
+            echo -e "----------------eSim Uninstalled Successfully----------------"
         fi
     elif [ $getConfirmation == "n" -o $getConfirmation == "N" ];then
         exit 0
