@@ -33,23 +33,16 @@ def find_all(a_str, sub):
         yield start
         start += len(sub) # use start += 1 to find overlapping matches
 
-# Always go 1 level up from the given path
-directory = os.path.abspath(os.path.join(sys.argv[1], ".."))
-if directory=="." : directory = os.getcwd()
-if not os.path.isdir(directory):
-    print(f"ERROR: '{directory}' is not a valid directory.")
-    sys.exit(1)
-
+directory = sys.argv[1]
 # out_file = sys.argv[2]
-
+if directory=="." : directory = os.getcwd()
 dir = os.listdir(directory)
 comp = []
 for component in dir:
 	if (component[-4:]==".asy") : comp.append(component)
 
-base_name = os.path.basename(os.path.normpath(directory))  # Get last folder name
-out_file = os.path.join(directory, "LTspice_" + base_name + ".lib")
-print("Output Lib File: ", out_file)
+indir = directory.split("\\")
+out_file = "LTspice_" + indir[len(indir)-1] + ".lib"
 outfl = codecs.open(out_file,"w");
 outfl.write("EESchema-LIBRARY Version 2.3\n#encoding utf-8\n#\n")
 

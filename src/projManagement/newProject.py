@@ -63,8 +63,6 @@ class NewProjectInfo(QtWidgets.QWidget):
         self.projName = projName
         self.workspace = self.obj_appconfig.default_workspace['workspace']
         # self.projName = self.projEdit.text()
-        # Remove leading and trailing space
-        # self.projName = str(self.projName).rstrip().lstrip()
         # Remove leading and trailing spaces AND replace internal spaces with underscores
         self.projName = str(self.projName).strip().replace(" ", "_")
 
@@ -97,7 +95,6 @@ class NewProjectInfo(QtWidgets.QWidget):
                 self.msg.exec_()
 
             # New KiCad v6 file extension
-        if f is not None:
             f.write("schematicFile " + self.projName + ".kicad_sch\n")
             f.close()
 
@@ -147,5 +144,5 @@ class NewProjectInfo(QtWidgets.QWidget):
             self.msg.exec_()
             return None, None
 
-    def cancelProject(self):
-        self.close()
+def cancelProject(self):
+    self.close()
